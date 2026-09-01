@@ -1,0 +1,143 @@
+# Machine-readable manifest for this template. The sibling
+# template.md holds the prose, the Requirements list, and the two
+# append-only history logs; this file is authoritative for everything
+# below. Both are generated together -- validate_template.py fails if
+# they disagree.
+format = "v2"
+
+[template]
+slug = "lunch-assistant"
+title = "Weekly Lunch Assistant"
+description = "A weekly cycle that reads a team Notion lunch page, recommends nutrition-spec-matching options for each weekday, writes the chosen picks back to the doc, and DMs an 8am portion reminder each weekday over Slack."
+thumbnail = "template.svg"
+version = "v1"
+
+# How this template is DERIVED from the workspace it came from. An
+# update re-runs this recipe rather than diffing two repos, which is what
+# keeps an exclusion excluded even though the thing still exists upstream.
+[recipe]
+include = [".agents/skills/weekly-lunch"]
+data_include = []
+# Deliberate exclusions: the user's private lunch preference notes under
+# data/memories/ (nutrition targets, operating rules, restaurant gotchas, the
+# user's identity/Slack DM). These are gitignored and personal, so they are
+# intentionally not shipped; the template ships generalized examples instead.
+exclude = [
+    "data/memories/lunch-nutrition-criteria",
+    "data/memories/lunch-presentation-and-reminders",
+    "data/memories/lunch-restaurant-notes",
+    "data/memories/lunch-picker-schedule",
+    "data/memories/user-identity",
+    "data/memories/matt-slack-dm",
+]
+# Published-version modifications, stated as RULES (never the removed values):
+modification_rules = [
+    "Replace the hardcoded personal Slack DM channel in send_lunch_reminder.sh with an adopter-supplied value read from the LUNCH_SLACK_CHANNEL env var, with a clear placeholder fallback and a comment on how to find it.",
+    "Generalize SKILL.md: replace the specific Notion lunch-page URL and page id with a placeholder the adopter sets, and replace the personal Slack DM channel id with a placeholder.",
+    "Generalize SKILL.md: replace the specific user name and company with neutral wording (the user / you / your team's lunch page).",
+    "Generalize SKILL.md: rewrite dated personal attributions as neutral statements of the lesson, keeping the lessons (vary restaurants; an exclusion is not a selection; verify every dish is real before recommending it).",
+    "Point SKILL.md at the shipped generalized example preferences instead of the user's private data/memories notes, and tell the adopter to create their own notes from them.",
+    "Add generalized example preference files under example-preferences/ (nutrition-spec.example.md, operating-rules.example.md, README.md) with no personal identifiers.",
+]
+
+# Everything an adopter must deal with before this is really theirs.
+# One list -- but each entry's KIND says how it is handled, because the
+# two are handled at different times by different mechanisms:
+#
+#   permission / secret / llm = ACTIVATION. The adopting agent acts on
+#   these FIRST and BY ITSELF, initiating each latchkey permission
+#   request before asking the user anything. Every one of them must have
+#   a matching requires_ line in template.md and vice versa -- the
+#   validator checks that, because an adopter once never got prompted
+#   for a permission the app needed.
+#
+#   adaptation = worked through INTERACTIVELY with the user afterwards.
+#   Prose on both sides, so it is not cross-checked.
+#
+# FILL IN, e.g.:
+#   [[requirements.permission]]
+#   scope = "slack-api"
+#   permission = "slack-read-all"
+#
+#   [[requirements.secret]]
+#   name = "SLACK_SIGNING_SECRET"
+#
+#   [requirements.llm]
+#   method = "keyed"   # keyed (an API key, e.g. ANTHROPIC_API_KEY) | keyless (a subscription CLI, e.g. claude -p)
+#
+#   [[requirements.adaptation]]
+#   summary = "the digest channel is hardcoded"
+#   resolution = "ask the user which channel to watch"
+[requirements]
+
+[[requirements.permission]]
+scope = "slack-api"
+permission = "slack-chat-write"
+note = "DM the daily reminder"
+
+[[requirements.permission]]
+scope = "slack-api"
+permission = "slack-conversations-write"
+note = "open the DM channel"
+
+[[requirements.permission]]
+scope = "slack-api"
+permission = "slack-auth-read"
+note = "confirm the Slack user/DM channel"
+
+[[requirements.permission]]
+scope = "slack-api"
+permission = "slack-users-read"
+note = "look up the user id to derive the DM channel"
+
+[[requirements.permission]]
+scope = "notion-mcp-api"
+permission = "notion-mcp-read-all"
+note = "read the Notion lunch page"
+
+[[requirements.permission]]
+scope = "notion-mcp-api"
+permission = "notion-mcp-update-page"
+note = "write picks onto the user's line"
+
+[[requirements.adaptation]]
+summary = "The Notion lunch-page URL is a placeholder (<YOUR_NOTION_LUNCH_PAGE_URL> in SKILL.md)."
+resolution = "Point it at the team's own Notion 'Lunch' page: weekly toggles with a per-weekday restaurant list and a checkbox list of names."
+
+[[requirements.adaptation]]
+summary = "The Slack DM channel id is a placeholder."
+resolution = "Supply your own DM channel id (a D... id) via LUNCH_SLACK_CHANNEL or the fallback in send_lunch_reminder.sh; find it with conversations.open on your own Slack user id."
+
+[[requirements.adaptation]]
+summary = "The nutrition targets and operating rules are not shipped as live config."
+resolution = "Create private preference notes under data/memories/ from the shipped example-preferences/ and edit them to your own goals, including whose line the orders go on in Notion."
+
+[[requirements.adaptation]]
+summary = "The reminder cron times are written in local container time with no UTC conversion."
+resolution = "Set the container clock to your own timezone, or the 8am reminders fire at the wrong hour."
+
+[[requirements.adaptation]]
+summary = "This Slack token type cannot use Slack's native chat.scheduleMessage."
+resolution = "Reminders are delivered through one-shot cron entries instead; an adopter on a token that supports scheduling could simplify this, but the cron path works as shipped."
+
+# What the included code needs INSTALLED. apt takes bare names: versions
+# are a function of the apt snapshot timestamp, so replaying names at the
+# adopter's timestamp yields versions consistent with the rest of their
+# environment. The other sources are not snapshot-pinned, so for them the
+# recorded version IS the pin (name = version).
+#
+# FILL IN from what the included code actually needs, e.g.:
+#   apt = ["poppler-utils"]
+#   [environment.npm_global]
+#   "@slack/cli" = "2.1.0"
+#   [environment.uv_tools]
+#   yt-dlp = "2026.7.1"
+#   [environment.cargo_crates]
+#   fd-find = "9.0.0"
+#
+# For an install with no package database (a URL-fetched binary, a browser),
+# ship a system/scripts/env.d/<NNNN>-<slug>-<name>.sh unit with NNNN >= 2000,
+# include it in the recipe above, and list it in env_d_units.
+[environment]
+apt = ["jq"]
+env_d_units = []
